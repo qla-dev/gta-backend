@@ -236,4 +236,9 @@ foreach ($commands as $step) {
     }
 }
 
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+    $write("OPcache cleared.\n");
+}
+
 $write("\nRedeploy completed successfully in ".(time() - $startedAt)."s.\n");
