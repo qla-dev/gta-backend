@@ -241,12 +241,27 @@ if (function_exists('opcache_reset')) {
     $write("OPcache cleared.\n");
 }
 
-// Bootstrap the sibling web directory's .htaccess if missing
-$webDir = dirname($baseDir).'/web';
+// Bootstrap the sibling web directory's .htaccess
+$write("\n=== Web directory diagnostics ===\n");
+$parentDir = dirname($baseDir);
+$write("Backend baseDir: {$baseDir}\n");
+$write("Parent dir: {$parentDir}\n");
+
+$parentContents = @scandir($parentDir);
+if ($parentContents !== false) {
+    $write("Parent contents: ".implode(', ', array_diff($parentContents, ['.', '..']))."\n");
+}
+
+$webDir = $parentDir.'/web';
 $webHtaccess = $webDir.'/.htaccess';
 $webDeployHtaccess = $webDir.'/deploy.htaccess';
 
-if (is_dir($webDir) && ! is_file($webHtaccess)) {
+$write("Web dir: {$webDir}\n");
+$write("Web dir exists: ".(is_dir($webDir) ? 'YES' : 'NO')."\n");
+$write(".htaccess exists: ".(is_file($webHtaccess) ? 'YES' : 'NO')."\n");
+$write("deploy.htaccess exists: ".(is_file($webDeployHtaccess) ? 'YES' : 'NO')."\n");
+
+if (is_dir($webDir)) {
     $write("\n=== Bootstrapping web .htaccess ===\n");
 
     $write("Pulling web repo...\n");
@@ -261,8 +276,10 @@ if (is_dir($webDir) && ! is_file($webHtaccess)) {
     } elseif ($pullExit !== 0) {
         $write("Web git pull failed (exit {$pullExit}), skipping .htaccess install.\n");
     } else {
-        $write("deploy.htaccess not found in web dir, skipping.\n");
+        $write("deploy.htaccess not found in web dir after pull.\n");
     }
+} else {
+    $write("Web directory not found, skipping bootstrap.\n");
 }
 
 $write("\nRedeploy completed successfully in ".(time() - $startedAt)."s.\n");
