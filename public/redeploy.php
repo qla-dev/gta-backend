@@ -186,8 +186,37 @@ $runCommand = static function (string $command, string $cwd, callable $write): i
     return is_int($exitCode) && $exitCode >= 0 ? $exitCode : $closeCode;
 };
 
+// Pull first so that a committed composer.phar arrives before we need it.
+$write("\n=== Pulling latest code ===\n");
+$write("Command: git pull --ff-only\n");
+$pullExit = $runCommand('git pull --ff-only', $baseDir, $write);
+if ($pullExit !== 0) {
+    $write("Pulling latest code failed with exit code {$pullExit}.\n");
+    exit($pullExit);
+}
+
+// Re-detect Composer after pull (a committed composer.phar may have arrived).
+if ($composer === null || (! is_file($composerPhar) && str_contains((string) $composer, 'composer.phar'))) {
+    $composer = null;
+    if (is_file($composerPhar)) {
+        $composer = $phpCommand.' '.$shellArg($composerPhar);
+        $write("Found composer.phar after pull.\n");
+    } else {
+        $globalComposer = $findExecutable(['composer']);
+        if ($globalComposer !== null) {
+            $composer = $shellArg($globalComposer);
+        } elseif ($downloadComposer($composerPhar, $write)) {
+            $composer = $phpCommand.' '.$shellArg($composerPhar);
+        }
+    }
+}
+
+if ($composer === null) {
+    $write("Could not find or download Composer.\n");
+    exit(127);
+}
+
 $commands = [
-    ['label' => 'Pulling latest code', 'command' => 'git pull --ff-only'],
     ['label' => 'Installing Composer dependencies', 'command' => $composer.' install --no-interaction --prefer-dist --no-progress --optimize-autoloader --no-dev --no-ansi'],
     ['label' => 'Clearing Laravel config cache', 'command' => $phpCommand.' artisan config:clear --no-ansi'],
     ['label' => 'Running database migrations', 'command' => $phpCommand.' artisan migrate --force --no-ansi'],
