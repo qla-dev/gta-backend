@@ -220,7 +220,7 @@ $commands = [
     ['label' => 'Installing Composer dependencies', 'command' => $composer.' install --no-interaction --prefer-dist --no-progress --optimize-autoloader --no-dev --no-ansi'],
     ['label' => 'Clearing Laravel config cache', 'command' => $phpCommand.' artisan config:clear --no-ansi'],
     ['label' => 'Running database migrations', 'command' => $phpCommand.' artisan migrate --force --no-ansi'],
-    ['label' => 'Clearing Laravel route cache', 'command' => $phpCommand.' artisan route:clear --no-ansi'],
+    ['label' => 'Rebuilding Laravel route cache', 'command' => $phpCommand.' artisan route:cache --no-ansi'],
     ['label' => 'Clearing Laravel view cache', 'command' => $phpCommand.' artisan view:clear --no-ansi'],
     ['label' => 'Clearing Laravel application cache', 'command' => $phpCommand.' artisan cache:clear --no-ansi'],
     ['label' => 'Rebuilding Laravel config cache', 'command' => $phpCommand.' artisan config:cache --no-ansi'],
@@ -239,6 +239,30 @@ foreach ($commands as $step) {
 if (function_exists('opcache_reset')) {
     opcache_reset();
     $write("OPcache cleared.\n");
+}
+
+// Bootstrap the sibling web directory's .htaccess if missing
+$webDir = dirname($baseDir).'/web';
+$webHtaccess = $webDir.'/.htaccess';
+$webDeployHtaccess = $webDir.'/deploy.htaccess';
+
+if (is_dir($webDir) && ! is_file($webHtaccess)) {
+    $write("\n=== Bootstrapping web .htaccess ===\n");
+
+    $write("Pulling web repo...\n");
+    $pullExit = $runCommand('git pull --ff-only', $webDir, $write);
+
+    if ($pullExit === 0 && is_file($webDeployHtaccess)) {
+        if (copy($webDeployHtaccess, $webHtaccess)) {
+            $write("Installed .htaccess from deploy.htaccess.\n");
+        } else {
+            $write("Failed to copy deploy.htaccess to .htaccess.\n");
+        }
+    } elseif ($pullExit !== 0) {
+        $write("Web git pull failed (exit {$pullExit}), skipping .htaccess install.\n");
+    } else {
+        $write("deploy.htaccess not found in web dir, skipping.\n");
+    }
 }
 
 $write("\nRedeploy completed successfully in ".(time() - $startedAt)."s.\n");
