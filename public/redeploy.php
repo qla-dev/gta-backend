@@ -241,45 +241,62 @@ if (function_exists('opcache_reset')) {
     $write("OPcache cleared.\n");
 }
 
-// Bootstrap the sibling web directory's .htaccess
-$write("\n=== Web directory diagnostics ===\n");
-$parentDir = dirname($baseDir);
-$write("Backend baseDir: {$baseDir}\n");
-$write("Parent dir: {$parentDir}\n");
+// Web frontend deploy: trigger with ?web=1
+$deployWeb = isset($_GET['web']) && $_GET['web'] === '1';
+$webDir = dirname($baseDir).'/web';
 
-$parentContents = @scandir($parentDir);
-if ($parentContents !== false) {
-    $write("Parent contents: ".implode(', ', array_diff($parentContents, ['.', '..']))."\n");
-}
+if ($deployWeb && is_dir($webDir)) {
+    $write("\n========== FRONTEND DEPLOY ==========\n");
 
-$webDir = $parentDir.'/web';
-$webHtaccess = $webDir.'/.htaccess';
-$webDeployHtaccess = $webDir.'/deploy.htaccess';
-
-$write("Web dir: {$webDir}\n");
-$write("Web dir exists: ".(is_dir($webDir) ? 'YES' : 'NO')."\n");
-$write(".htaccess exists: ".(is_file($webHtaccess) ? 'YES' : 'NO')."\n");
-$write("deploy.htaccess exists: ".(is_file($webDeployHtaccess) ? 'YES' : 'NO')."\n");
-
-if (is_dir($webDir)) {
-    $write("\n=== Bootstrapping web .htaccess ===\n");
-
-    $write("Pulling web repo...\n");
-    $pullExit = $runCommand('git pull --ff-only', $webDir, $write);
-
-    if ($pullExit === 0 && is_file($webDeployHtaccess)) {
-        if (copy($webDeployHtaccess, $webHtaccess)) {
-            $write("Installed .htaccess from deploy.htaccess.\n");
-        } else {
-            $write("Failed to copy deploy.htaccess to .htaccess.\n");
+    $npmCandidates = [
+        '/opt/cpanel/ea-nodejs24/bin/npm',
+        '/opt/cpanel/ea-nodejs22/bin/npm',
+        '/opt/cpanel/ea-nodejs20/bin/npm',
+        '/opt/alt/alt-nodejs24/root/usr/bin/npm',
+        '/opt/alt/alt-nodejs22/root/usr/bin/npm',
+        '/opt/alt/alt-nodejs20/root/usr/bin/npm',
+        '/usr/local/bin/npm',
+        '/usr/bin/npm',
+    ];
+    foreach (['/opt/cpanel/ea-nodejs*/bin/npm', '/opt/alt/alt-nodejs*/root/usr/bin/npm'] as $glob) {
+        foreach (glob($glob) ?: [] as $c) {
+            $npmCandidates[] = $c;
         }
-    } elseif ($pullExit !== 0) {
-        $write("Web git pull failed (exit {$pullExit}), skipping .htaccess install.\n");
-    } else {
-        $write("deploy.htaccess not found in web dir after pull.\n");
     }
-} else {
-    $write("Web directory not found, skipping bootstrap.\n");
+    $npm = null;
+    foreach (array_unique($npmCandidates) as $c) {
+        if (is_file($c) && is_executable($c)) {
+            $npm = $c;
+            break;
+        }
+    }
+    if ($npm === null) {
+        $write("npm not found — cannot build frontend.\n");
+    } else {
+        $nodeBinDir = dirname($npm);
+        $currentPath = (string) (getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin');
+        putenv('PATH='.$nodeBinDir.PATH_SEPARATOR.$currentPath);
+        $npmCmd = escapeshellarg($npm);
+
+        $webSteps = [
+            ['label' => 'Resetting web working tree', 'command' => 'git checkout -- . && git clean -fd'],
+            ['label' => 'Pulling latest frontend code', 'command' => 'git pull --ff-only'],
+            ['label' => 'Installing frontend dependencies', 'command' => $npmCmd.' install --no-audit --no-fund --legacy-peer-deps'],
+            ['label' => 'Building frontend', 'command' => $npmCmd.' run build'],
+            ['label' => 'Deploying build to web root', 'command' => 'cp -af dist/. .'],
+            ['label' => 'Installing .htaccess', 'command' => 'cp -f deploy.htaccess .htaccess'],
+        ];
+
+        foreach ($webSteps as $step) {
+            $write("\n=== {$step['label']} ===\n");
+            $write("Command: {$step['command']}\n");
+            $exitCode = $runCommand($step['command'], $webDir, $write);
+            if ($exitCode !== 0) {
+                $write("{$step['label']} failed with exit code {$exitCode}.\n");
+                break;
+            }
+        }
+    }
 }
 
 $write("\nRedeploy completed successfully in ".(time() - $startedAt)."s.\n");
