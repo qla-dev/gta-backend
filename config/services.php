@@ -39,4 +39,10 @@ return [
         'key' => env('GEMINI_API_KEY'),
     ],
 
+    'google' => [
+        'ios_client_id' => env('GOOGLE_IOS_CLIENT_ID', '26872246820-lolanjps9n6bfisn3srjpl6odd9nm2ak.apps.googleusercontent.com'),
+        'web_client_id' => env('GOOGLE_WEB_CLIENT_ID', '26872246820-2nmb25vtdtk21i88a2q4tm48d76h7i8g.apps.googleusercontent.com'),
+        'android_client_id' => env('GOOGLE_ANDROID_CLIENT_ID', '26872246820-hpgopunb07b6mm9k6c91a5qbt9sk1rup.apps.googleusercontent.com'),
+    ],
+
 ];
