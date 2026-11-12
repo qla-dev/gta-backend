@@ -36,8 +36,7 @@ class AppleIdentity
             throw new \RuntimeException('Token expired.');
         }
 
-        $expectedNonce = hash('sha256', $nonce);
-        if (! hash_equals($expectedNonce, $payload['nonce'] ?? '')) {
+        if (! hash_equals($nonce, $payload['nonce'] ?? '')) {
             throw new \RuntimeException('Nonce mismatch.');
         }
 
