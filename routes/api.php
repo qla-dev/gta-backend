@@ -6,6 +6,7 @@ use App\Http\Controllers\ChecklistController;
 use App\Http\Controllers\CrewController;
 use App\Http\Controllers\GoogleSessionController;
 use App\Http\Controllers\GameStateController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\NewsCommentController;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Support\Facades\DB;
@@ -61,4 +62,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/crews', [CrewController::class, 'store']);
     Route::post('/crews/join', [CrewController::class, 'join']);
     Route::post('/crews/{id}/leave', [CrewController::class, 'leave']);
+
+    // Crew messages
+    Route::get('/crews/{id}/messages', [MessageController::class, 'crewMessages']);
+    Route::post('/crews/{id}/messages', [MessageController::class, 'sendCrewMessage']);
+
+    // Direct messages
+    Route::get('/messages/conversations', [MessageController::class, 'conversations']);
+    Route::get('/messages/dm/{partnerId}', [MessageController::class, 'directMessages']);
+    Route::post('/messages/dm/{partnerId}', [MessageController::class, 'sendDirectMessage']);
+    Route::get('/messages/search-users', [MessageController::class, 'searchUsers']);
 });
