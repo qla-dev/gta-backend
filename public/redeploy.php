@@ -119,7 +119,18 @@ $composerPhar = $baseDir.DIRECTORY_SEPARATOR.'composer.phar';
 $composer = null;
 
 if (is_file($composerPhar)) {
-    $composer = $phpCommand.' '.$shellArg($composerPhar);
+    // Validate phar is not corrupt; re-download if it is.
+    $testCmd = $phpCommand.' '.$shellArg($composerPhar).' --version 2>&1';
+    exec($testCmd, $testOut, $testExit);
+    if ($testExit !== 0) {
+        $write("Existing composer.phar appears corrupt — removing and re-downloading.\n");
+        @unlink($composerPhar);
+        if ($downloadComposer($composerPhar, $write)) {
+            $composer = $phpCommand.' '.$shellArg($composerPhar);
+        }
+    } else {
+        $composer = $phpCommand.' '.$shellArg($composerPhar);
+    }
 } else {
     $globalComposer = $findExecutable(['composer']);
 
