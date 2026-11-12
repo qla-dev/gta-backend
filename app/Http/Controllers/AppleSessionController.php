@@ -73,6 +73,8 @@ class AppleSessionController extends Controller
                 'ai_coins' => self::REGISTRATION_COINS,
             ]);
             $registered = true;
+        } elseif ($request->filled('name') && $user->name === 'Player') {
+            $user->update(['name' => $request->input('name')]);
         }
 
         if ($email) {
