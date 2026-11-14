@@ -39,6 +39,12 @@ return [
         'key' => env('GEMINI_API_KEY'),
     ],
 
+    'openrouter' => [
+        'key' => env('OPENROUTER_API_KEY'),
+        'model' => env('AI_MODEL', 'google/gemini-2.5-flash'),
+        'url' => 'https://openrouter.ai/api/v1/chat/completions',
+    ],
+
     'google' => [
         'ios_client_id' => env('GOOGLE_IOS_CLIENT_ID', '26872246820-lolanjps9n6bfisn3srjpl6odd9nm2ak.apps.googleusercontent.com'),
         'web_client_id' => env('GOOGLE_WEB_CLIENT_ID', '26872246820-2nmb25vtdtk21i88a2q4tm48d76h7i8g.apps.googleusercontent.com'),

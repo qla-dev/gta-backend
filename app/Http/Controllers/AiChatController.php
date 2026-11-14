@@ -5,59 +5,137 @@ namespace App\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AiChatController extends Controller
 {
-    private const SYSTEM_PROMPT = <<<'PROMPT'
+    private const VICE_PROMPT = <<<'PROMPT'
 You are V.I.C.E. (Virtual Intelligence Crime Engine), the built-in AI copilot for the fictional LeonidaOS smartphone in GTA VI (Grand Theft Auto VI).
 You operate inside the neon-lit, satirical, sunny, and dangerous universe of Vice City and the state of Leonida.
 Your personality is street-smart, tactical, slightly sarcastic, highly knowledgeable about criminal getaways, exotic supercars, underground chop shops, waterfront penthouses, Everglades alligators, and police evasion tactics.
 Always stay in character as a fictional in-game operating system assistant.
 Give crisp, exciting, helpful answers formatted with bullet points or quick tactical summaries when helpful.
+If the user sends an image, describe what you see in the context of Vice City and Leonida.
 PROMPT;
+
+    private const VEHICLE_PROMPT = <<<'PROMPT'
+You analyze vehicle images and data for a GTA VI companion app. Return ONLY a JSON object with: name (string), category (string, e.g. 'Sports', 'Muscle', 'SUV', 'Sedan'), speed (string, e.g. '210 MPH'), color (string), icon (string, Ionicons name like 'car-sport'), description (string, 1-2 sentences GTA-style).
+If the user sends an image, identify the vehicle. If they send text, generate vehicle data matching their description.
+Always respond with fictional GTA-universe vehicle names and stats. Make the description feel like a Legendary Motorsport listing.
+PROMPT;
+
+    private const PROPERTY_PROMPT = <<<'PROMPT'
+You analyze property/real estate images and data for a GTA VI companion app. Return ONLY a JSON object with: name (string), location (string), type (string, e.g. 'Penthouse', 'Villa', 'Warehouse', 'Stilt House'), value (string, e.g. '$2,450,000'), icon (string, Ionicons name like 'home'), description (string, 1-2 sentences GTA-style).
+If the user sends an image, identify the property. If they send text, generate property data matching their description.
+Always respond with fictional GTA-universe property names and locations in Vice City / Leonida. Make the description feel like a Dynasty 8 Real Estate listing.
+PROMPT;
+
+    private const PAID_MODES = ['vehicle', 'property'];
+    private const COIN_COST = 10;
 
     public function chat(Request $request): JsonResponse
     {
         $request->validate([
-            'message' => 'required|string|max:2000',
+            'message' => 'nullable|string|max:2000',
             'history' => 'array|max:20',
             'history.*.role' => 'in:user,assistant',
             'history.*.content' => 'string|max:4000',
+            'image' => ['nullable', 'string', 'max:4000000', 'regex:#^data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/\n\r]+=*$#'],
+            'mode' => 'nullable|in:vice,vehicle,property',
         ]);
 
-        $apiKey = config('services.gemini.key');
+        $mode = $request->input('mode', 'vice');
+        $message = $request->input('message', '');
+        $image = $request->input('image');
+
+        if (! $message && ! $image) {
+            return response()->json(['error' => 'Message or image is required.'], 422);
+        }
+
+        $user = null;
+        if (in_array($mode, self::PAID_MODES, true)) {
+            $bearer = $request->bearerToken();
+            if ($bearer) {
+                $token = PersonalAccessToken::findToken($bearer);
+                $user = $token?->tokenable;
+            }
+            if (! $user) {
+                return response()->json(['error' => 'Authentication required.'], 401);
+            }
+            if ($user->ai_coins < self::COIN_COST) {
+                return response()->json(['error' => 'Insufficient credits. You need '.self::COIN_COST.' credits.', 'required' => self::COIN_COST], 402);
+            }
+        }
+
+        $apiKey = config('services.openrouter.key');
 
         if (! $apiKey) {
             return response()->json([
-                'reply' => $this->fallbackReply($request->input('message')),
+                'reply' => $this->fallbackReply($message ?: 'image'),
                 'source' => 'local',
             ]);
         }
 
-        $contents = [];
+        $systemPrompt = match ($mode) {
+            'vehicle' => self::VEHICLE_PROMPT,
+            'property' => self::PROPERTY_PROMPT,
+            default => self::VICE_PROMPT,
+        };
+
+        $messages = [['role' => 'system', 'content' => $systemPrompt]];
 
         foreach ($request->input('history', []) as $msg) {
-            $contents[] = [
-                'role' => $msg['role'] === 'assistant' ? 'model' : 'user',
-                'parts' => [['text' => $msg['content']]],
-            ];
+            $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
         }
 
-        $contents[] = [
-            'role' => 'user',
-            'parts' => [['text' => self::SYSTEM_PROMPT."\n\nUser Question: ".$request->input('message')]],
-        ];
+        $userContent = [];
+        if ($message) {
+            $userContent[] = ['type' => 'text', 'text' => $message];
+        }
+        if ($image) {
+            $userContent[] = ['type' => 'image_url', 'image_url' => ['url' => $image]];
+        }
+
+        $messages[] = ['role' => 'user', 'content' => $userContent];
 
         try {
-            $response = Http::timeout(30)->post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}",
-                ['contents' => $contents]
-            );
+            $payload = [
+                'model' => config('services.openrouter.model'),
+                'messages' => $messages,
+                'max_tokens' => 1200,
+            ];
+
+            if ($mode !== 'vice') {
+                $payload['response_format'] = ['type' => 'json_object'];
+            }
+
+            $response = Http::withToken($apiKey)
+                ->timeout(45)
+                ->post(config('services.openrouter.url'), $payload);
 
             if ($response->successful()) {
-                $text = $response->json('candidates.0.content.parts.0.text', '');
+                $text = $response->json('choices.0.message.content', '');
+
                 if ($text) {
-                    return response()->json(['reply' => $text, 'source' => 'gemini']);
+                    if (in_array($mode, self::PAID_MODES, true) && $user) {
+                        $user->decrement('ai_coins', self::COIN_COST);
+                        $user->refresh();
+                    }
+
+                    if ($mode !== 'vice') {
+                        $data = json_decode($text, true);
+                        if (! is_array($data)) {
+                            $data = ['error' => 'Failed to parse AI response.'];
+                        }
+
+                        return response()->json([
+                            'data' => $data,
+                            'source' => 'openrouter',
+                            'ai_coins' => $user?->ai_coins,
+                        ]);
+                    }
+
+                    return response()->json(['reply' => $text, 'source' => 'openrouter']);
                 }
             }
         } catch (\Throwable) {
@@ -65,7 +143,7 @@ PROMPT;
         }
 
         return response()->json([
-            'reply' => $this->fallbackReply($request->input('message')),
+            'reply' => $this->fallbackReply($message ?: 'image'),
             'source' => 'local',
         ]);
     }
