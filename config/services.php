@@ -35,14 +35,11 @@ return [
         ],
     ],
 
-    'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
-    ],
-
     'openrouter' => [
         'key' => env('OPENROUTER_API_KEY'),
-        'model' => env('AI_MODEL', 'google/gemini-2.5-flash'),
-        'url' => 'https://openrouter.ai/api/v1/chat/completions',
+        'model' => env('OPENROUTER_MODEL', 'google/gemini-2.5-flash'),
+        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'anthropic/claude-3.5-haiku'),
+        'url' => env('OPENROUTER_URL', 'https://openrouter.ai/api/v1/chat/completions'),
     ],
 
     'google' => [

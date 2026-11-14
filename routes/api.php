@@ -8,6 +8,7 @@ use App\Http\Controllers\GoogleSessionController;
 use App\Http\Controllers\GameStateController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\NewsCommentController;
+use App\Services\RevenueCatPurchases;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -45,9 +46,17 @@ Route::get('/news/{articleId}/comments', [NewsCommentController::class, 'index']
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AppleSessionController::class, 'me']);
     Route::post('/auth/sign-out', [AppleSessionController::class, 'destroy']);
-    Route::post('/purchases', function (\Illuminate\Http\Request $request) {
-        $request->validate(['product_id' => 'required|string']);
-        return response()->json(['ai_coins' => $request->user()->ai_coins]);
+    Route::post('/purchases', function (\Illuminate\Http\Request $request, RevenueCatPurchases $purchases) {
+        $products = array_keys(config('purchases.coin_products'));
+        $data = $request->validate([
+            'product_id' => ['required', 'string', \Illuminate\Validation\Rule::in($products)],
+        ]);
+        $granted = $purchases->sync($request->user(), $data['product_id']);
+
+        return response()->json([
+            'ai_coins' => $request->user()->fresh()->ai_coins,
+            'granted' => $granted,
+        ]);
     });
 
     // News comments (auth required to post)

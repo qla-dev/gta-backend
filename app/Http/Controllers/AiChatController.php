@@ -98,48 +98,59 @@ PROMPT;
 
         $messages[] = ['role' => 'user', 'content' => $userContent];
 
-        try {
-            $payload = [
-                'model' => config('services.openrouter.model'),
-                'messages' => $messages,
-                'max_tokens' => 1200,
-            ];
+        $models = array_filter([
+            config('services.openrouter.model'),
+            config('services.openrouter.fallback_model'),
+        ]);
+        $url = config('services.openrouter.url');
 
-            if ($mode !== 'vice') {
-                $payload['response_format'] = ['type' => 'json_object'];
-            }
+        foreach ($models as $model) {
+            try {
+                $payload = [
+                    'model' => $model,
+                    'messages' => $messages,
+                    'max_tokens' => 1200,
+                ];
 
-            $response = Http::withToken($apiKey)
-                ->timeout(45)
-                ->post(config('services.openrouter.url'), $payload);
-
-            if ($response->successful()) {
-                $text = $response->json('choices.0.message.content', '');
-
-                if ($text) {
-                    if (in_array($mode, self::PAID_MODES, true) && $user) {
-                        $user->decrement('ai_coins', self::COIN_COST);
-                        $user->refresh();
-                    }
-
-                    if ($mode !== 'vice') {
-                        $data = json_decode($text, true);
-                        if (! is_array($data)) {
-                            $data = ['error' => 'Failed to parse AI response.'];
-                        }
-
-                        return response()->json([
-                            'data' => $data,
-                            'source' => 'openrouter',
-                            'ai_coins' => $user?->ai_coins,
-                        ]);
-                    }
-
-                    return response()->json(['reply' => $text, 'source' => 'openrouter']);
+                if ($mode !== 'vice') {
+                    $payload['response_format'] = ['type' => 'json_object'];
                 }
+
+                $response = Http::withToken($apiKey)
+                    ->timeout(45)
+                    ->post($url, $payload);
+
+                if (! $response->successful()) {
+                    continue;
+                }
+
+                $text = $response->json('choices.0.message.content', '');
+                if (! $text) {
+                    continue;
+                }
+
+                if (in_array($mode, self::PAID_MODES, true) && $user) {
+                    $user->decrement('ai_coins', self::COIN_COST);
+                    $user->refresh();
+                }
+
+                if ($mode !== 'vice') {
+                    $data = json_decode($text, true);
+                    if (! is_array($data)) {
+                        $data = ['error' => 'Failed to parse AI response.'];
+                    }
+
+                    return response()->json([
+                        'data' => $data,
+                        'source' => 'openrouter',
+                        'ai_coins' => $user?->ai_coins,
+                    ]);
+                }
+
+                return response()->json(['reply' => $text, 'source' => 'openrouter']);
+            } catch (\Throwable) {
+                continue;
             }
-        } catch (\Throwable) {
-            // fall through to local
         }
 
         return response()->json([
