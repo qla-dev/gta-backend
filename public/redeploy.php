@@ -37,6 +37,7 @@ foreach ([$composerHome, $composerCache] as $directory) {
 putenv('HOME='.$composerHome);
 putenv('COMPOSER_HOME='.$composerHome);
 putenv('COMPOSER_CACHE_DIR='.$composerCache);
+putenv('COMPOSER_MEMORY_LIMIT=512M');
 
 if (PHP_SAPI !== 'cli') {
     header('Content-Type: text/plain; charset=utf-8');
