@@ -40,7 +40,14 @@ class MessageController extends Controller
      */
     public function sendCrewMessage(Request $request, int $crewId): JsonResponse
     {
-        $request->validate(['body' => 'required|string|max:2000']);
+        $request->validate([
+            'body' => 'nullable|string|max:2000',
+            'image' => 'nullable|image|max:10240',
+        ]);
+
+        if (! $request->input('body') && ! $request->hasFile('image')) {
+            return response()->json(['error' => 'Message body or image is required.'], 422);
+        }
 
         $isMember = CrewMember::where('crew_id', $crewId)
             ->where('user_id', $request->user()->id)
@@ -50,10 +57,17 @@ class MessageController extends Controller
             return response()->json(['error' => 'Not a crew member.'], 403);
         }
 
+        $imageUrl = null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('chat-images', 'public');
+            $imageUrl = rtrim(env('APP_URL', ''), '/').'/storage/'.$path;
+        }
+
         $message = Message::create([
             'sender_id' => $request->user()->id,
             'crew_id' => $crewId,
-            'body' => $request->input('body'),
+            'body' => $request->input('body', ''),
+            'image_url' => $imageUrl,
         ]);
 
         $message->load('sender:id,name');
@@ -193,6 +207,7 @@ class MessageController extends Controller
             'sender_id' => $m->sender_id,
             'sender_name' => $m->sender->name ?? 'Player',
             'body' => $m->body,
+            'image_url' => $m->image_url,
             'created_at' => $m->created_at->toIso8601String(),
         ];
     }
