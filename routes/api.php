@@ -11,6 +11,7 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\NewsCommentController;
 use App\Services\RevenueCatPurchases;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -46,6 +47,7 @@ Route::get('/news/{articleId}/comments', [NewsCommentController::class, 'index']
 Route::get('/bleeter/channels', [BleeterController::class, 'channels']);
 Route::get('/bleeter/posts', [BleeterController::class, 'posts']);
 Route::get('/bleeter/posts/{id}/comments', [BleeterController::class, 'comments']);
+Route::get('/wallet/transactions', [WalletController::class, 'index']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AppleSessionController::class, 'me']);
@@ -70,6 +72,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bleeter/posts', [BleeterController::class, 'store']);
     Route::post('/bleeter/posts/{id}/like', [BleeterController::class, 'like']);
     Route::post('/bleeter/posts/{id}/comments', [BleeterController::class, 'storeComment']);
+
+    // Wallet
+    Route::post('/wallet/transactions', [WalletController::class, 'store']);
 
     // Checklist progress (auth required)
     Route::post('/checklist/{id}/toggle', [ChecklistController::class, 'toggle']);
