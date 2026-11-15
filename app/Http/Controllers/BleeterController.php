@@ -46,6 +46,19 @@ class BleeterController extends Controller
         }
 
         $page = $query->simplePaginate($data['limit'] ?? 10);
+
+        $user = $request->user('sanctum');
+        $likedIds = [];
+        if ($user) {
+            $postIds = $page->getCollection()->pluck('id');
+            $likedIds = DB::table('bleeter_post_likes')
+                ->where('user_id', $user->id)
+                ->whereIn('bleeter_post_id', $postIds)
+                ->pluck('bleeter_post_id')
+                ->flip()
+                ->all();
+        }
+
         $posts = $page->getCollection()->map(fn ($p) => [
             'id' => $p->id,
             'user_id' => $p->user_id,
@@ -55,6 +68,7 @@ class BleeterController extends Controller
             'channel_name' => $p->channel->name ?? 'General',
             'likes_count' => $p->likes_count,
             'comments_count' => $p->comments_count,
+            'liked_by_me' => isset($likedIds[$p->id]),
             'created_at' => $p->created_at->toIso8601String(),
         ]);
 
@@ -92,6 +106,7 @@ class BleeterController extends Controller
                 'channel_name' => $post->channel->name,
                 'likes_count' => 0,
                 'comments_count' => 0,
+                'liked_by_me' => false,
                 'created_at' => $post->created_at->toIso8601String(),
             ],
         ], 201);
@@ -100,14 +115,29 @@ class BleeterController extends Controller
     public function like(Request $request, int $id, BleeterActivity $activity): JsonResponse
     {
         $post = BleeterPost::findOrFail($id);
-        $added = DB::table('bleeter_post_likes')->insertOrIgnore([
-            'user_id' => $request->user()->id, 'bleeter_post_id' => $id,
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
-        if ($added) {
+        $userId = $request->user()->id;
+        $existing = DB::table('bleeter_post_likes')
+            ->where('user_id', $userId)
+            ->where('bleeter_post_id', $id)
+            ->first();
+
+        if ($existing) {
+            DB::table('bleeter_post_likes')
+                ->where('user_id', $userId)
+                ->where('bleeter_post_id', $id)
+                ->delete();
+            $post->decrement('likes_count');
+            $liked = false;
+        } else {
+            DB::table('bleeter_post_likes')->insert([
+                'user_id' => $userId, 'bleeter_post_id' => $id,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
             $post->increment('likes_count');
-            $activity->notify($post, $request->user()->id, 'like');
+            $activity->notify($post, $userId, 'like');
+            $liked = true;
         }
+
         $post->load(['user:id,name', 'channel:id,name']);
         $post->loadCount('comments');
 
@@ -120,6 +150,7 @@ class BleeterController extends Controller
                 'channel_name' => $post->channel->name ?? 'General',
                 'likes_count' => $post->likes_count,
                 'comments_count' => $post->comments_count,
+                'liked_by_me' => $liked,
                 'created_at' => $post->created_at->toIso8601String(),
             ],
         ]);
