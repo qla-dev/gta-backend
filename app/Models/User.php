@@ -23,6 +23,8 @@ class User extends Authenticatable
         'google_id',
         'google_email',
         'ai_coins',
+        'terms_version',
+        'terms_accepted_at',
     ];
 
     protected $hidden = [
@@ -57,11 +59,13 @@ class User extends Authenticatable
             $this->free_messages_used = 1;
             $this->free_messages_date = today();
             $this->save();
+
             return true;
         }
 
         if ($this->free_messages_used < 30) {
             $this->increment('free_messages_used');
+
             return true;
         }
 
@@ -75,6 +79,7 @@ class User extends Authenticatable
         }
 
         $this->decrement('ai_coins');
+
         return true;
     }
 }

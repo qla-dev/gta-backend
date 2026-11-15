@@ -6,12 +6,16 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\Rule;
 
 class GoogleSessionController extends Controller
 {
     private const REGISTRATION_COINS = 30;
+
     private const FREE_DAILY_MESSAGES = 30;
+
     private const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
+
     private const GOOGLE_TOKEN_INFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
 
     public function store(Request $request): JsonResponse
@@ -19,6 +23,8 @@ class GoogleSessionController extends Controller
         $request->validate([
             'id_token' => 'required|string',
             'name' => 'nullable|string|max:255',
+            'accepted_terms' => 'required|accepted',
+            'terms_version' => ['required', Rule::in([config('support.terms_version')])],
         ]);
 
         $payload = $this->verifyIdToken($request->input('id_token'));
@@ -56,6 +62,7 @@ class GoogleSessionController extends Controller
             $user->update(['google_email' => $email]);
         }
 
+        $user->update(['terms_version' => $request->input('terms_version'), 'terms_accepted_at' => now()]);
         $token = $user->createToken('mobile', expiresAt: now()->addDays(90));
 
         return response()->json([

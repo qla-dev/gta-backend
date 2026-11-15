@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\BleeterChannel;
 use App\Models\BleeterComment;
 use App\Models\BleeterPost;
+use App\Services\BleeterActivity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BleeterController extends Controller
 {
@@ -28,17 +30,25 @@ class BleeterController extends Controller
 
     public function posts(Request $request): JsonResponse
     {
+        $data = $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'limit' => 'sometimes|integer|min:1|max:50',
+            'channel_id' => 'sometimes|integer|min:1',
+        ]);
+
         $query = BleeterPost::with(['user:id,name', 'channel:id,name'])
             ->withCount('comments')
             ->orderByDesc('created_at')
-            ->limit(50);
+            ->orderByDesc('id');
 
         if ($request->has('channel_id')) {
             $query->where('channel_id', $request->input('channel_id'));
         }
 
-        $posts = $query->get()->map(fn ($p) => [
+        $page = $query->simplePaginate($data['limit'] ?? 10);
+        $posts = $page->getCollection()->map(fn ($p) => [
             'id' => $p->id,
+            'user_id' => $p->user_id,
             'user_name' => $p->user->name ?? 'Anonymous',
             'body' => $p->body,
             'channel_id' => $p->channel_id,
@@ -48,7 +58,14 @@ class BleeterController extends Controller
             'created_at' => $p->created_at->toIso8601String(),
         ]);
 
-        return response()->json(['posts' => $posts]);
+        return response()->json([
+            'posts' => $posts,
+            'meta' => [
+                'page' => $page->currentPage(),
+                'limit' => $page->perPage(),
+                'has_more' => $page->hasMorePages(),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -80,10 +97,17 @@ class BleeterController extends Controller
         ], 201);
     }
 
-    public function like(int $id): JsonResponse
+    public function like(Request $request, int $id, BleeterActivity $activity): JsonResponse
     {
         $post = BleeterPost::findOrFail($id);
-        $post->increment('likes_count');
+        $added = DB::table('bleeter_post_likes')->insertOrIgnore([
+            'user_id' => $request->user()->id, 'bleeter_post_id' => $id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        if ($added) {
+            $post->increment('likes_count');
+            $activity->notify($post, $request->user()->id, 'like');
+        }
         $post->load(['user:id,name', 'channel:id,name']);
         $post->loadCount('comments');
 
@@ -134,6 +158,7 @@ class BleeterController extends Controller
         ]);
 
         $comment->load('user:id,name');
+        app(BleeterActivity::class)->notify(BleeterPost::findOrFail($id), $request->user()->id, 'comment');
 
         return response()->json([
             'comment' => [

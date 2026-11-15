@@ -1,19 +1,26 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\AppleSessionController;
 use App\Http\Controllers\BleeterController;
+use App\Http\Controllers\BusinessController;
 use App\Http\Controllers\ChecklistController;
 use App\Http\Controllers\CrewController;
-use App\Http\Controllers\GoogleSessionController;
 use App\Http\Controllers\GameStateController;
+use App\Http\Controllers\GoogleSessionController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\MissionController;
 use App\Http\Controllers\NewsCommentController;
-use App\Services\RevenueCatPurchases;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\SupportController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\WalletController;
+use App\Services\RevenueCatPurchases;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rule;
 
 Route::get('/health', function () {
     try {
@@ -43,6 +50,8 @@ Route::post('/auth/google', [GoogleSessionController::class, 'store']);
 // Public endpoints
 Route::get('/vehicles', [VehicleController::class, 'index']);
 Route::get('/checklist', [ChecklistController::class, 'index']);
+Route::get('/missions', [MissionController::class, 'index']);
+Route::get('/businesses', [BusinessController::class, 'index']);
 Route::get('/news/{articleId}/comments', [NewsCommentController::class, 'index']);
 Route::get('/bleeter/channels', [BleeterController::class, 'channels']);
 Route::get('/bleeter/posts', [BleeterController::class, 'posts']);
@@ -50,12 +59,18 @@ Route::get('/bleeter/posts/{id}/comments', [BleeterController::class, 'comments'
 Route::get('/wallet/transactions', [WalletController::class, 'index']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::delete('/auth/account', [AccountController::class, 'destroy'])->middleware('throttle:3,1');
+    Route::post('/support/reports', [SupportController::class, 'store'])->middleware('throttle:5,10');
+    Route::get('/bleeter/notifications', [NotificationController::class, 'index']);
+    Route::post('/bleeter/notifications/read', [NotificationController::class, 'read']);
+    Route::post('/notifications/push-token', [NotificationController::class, 'register']);
+    Route::delete('/notifications/push-token', [NotificationController::class, 'unregister']);
     Route::get('/auth/me', [AppleSessionController::class, 'me']);
     Route::post('/auth/sign-out', [AppleSessionController::class, 'destroy']);
-    Route::post('/purchases', function (\Illuminate\Http\Request $request, RevenueCatPurchases $purchases) {
+    Route::post('/purchases', function (Request $request, RevenueCatPurchases $purchases) {
         $products = array_keys(config('purchases.coin_products'));
         $data = $request->validate([
-            'product_id' => ['required', 'string', \Illuminate\Validation\Rule::in($products)],
+            'product_id' => ['required', 'string', Rule::in($products)],
         ]);
         $granted = $purchases->sync($request->user(), $data['product_id']);
 
@@ -77,6 +92,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/wallet/transactions', [WalletController::class, 'store']);
 
     // Checklist progress (auth required)
+    Route::post('/missions/{mission}/progress', [MissionController::class, 'updateProgress']);
+    Route::post('/businesses/{business}/state', [BusinessController::class, 'updateState']);
     Route::post('/checklist/{id}/toggle', [ChecklistController::class, 'toggle']);
     Route::post('/checklist/{id}/progress', [ChecklistController::class, 'updateProgress']);
 

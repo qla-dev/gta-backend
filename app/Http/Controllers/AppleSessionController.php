@@ -8,11 +8,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class AppleSessionController extends Controller
 {
     private const REGISTRATION_COINS = 30;
+
     private const FREE_DAILY_MESSAGES = 30;
+
     private const CHALLENGE_TTL = 300; // 5 minutes
 
     public function challenge(): JsonResponse
@@ -34,6 +37,8 @@ class AppleSessionController extends Controller
             'identity_token' => 'required|string',
             'challenge_id' => 'required|string',
             'name' => 'nullable|string|max:255',
+            'accepted_terms' => 'required|accepted',
+            'terms_version' => ['required', Rule::in([config('support.terms_version')])],
         ]);
 
         $nonce = Cache::pull("apple_challenge:{$request->input('challenge_id')}");
@@ -84,6 +89,7 @@ class AppleSessionController extends Controller
             ]);
         }
 
+        $user->update(['terms_version' => $request->input('terms_version'), 'terms_accepted_at' => now()]);
         $token = $user->createToken('mobile', expiresAt: now()->addDays(90));
 
         return response()->json([
