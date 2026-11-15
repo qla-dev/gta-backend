@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\AppleSessionController;
+use App\Http\Controllers\BleeterController;
 use App\Http\Controllers\ChecklistController;
 use App\Http\Controllers\CrewController;
 use App\Http\Controllers\GoogleSessionController;
@@ -42,6 +43,8 @@ Route::post('/auth/google', [GoogleSessionController::class, 'store']);
 Route::get('/vehicles', [VehicleController::class, 'index']);
 Route::get('/checklist', [ChecklistController::class, 'index']);
 Route::get('/news/{articleId}/comments', [NewsCommentController::class, 'index']);
+Route::get('/bleeter/channels', [BleeterController::class, 'channels']);
+Route::get('/bleeter/posts', [BleeterController::class, 'posts']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AppleSessionController::class, 'me']);
@@ -61,6 +64,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // News comments (auth required to post)
     Route::post('/news/{articleId}/comments', [NewsCommentController::class, 'store']);
+
+    // Bleeter (auth required to post/like)
+    Route::post('/bleeter/posts', [BleeterController::class, 'store']);
+    Route::post('/bleeter/posts/{id}/like', [BleeterController::class, 'like']);
 
     // Checklist progress (auth required)
     Route::post('/checklist/{id}/toggle', [ChecklistController::class, 'toggle']);
