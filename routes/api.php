@@ -45,6 +45,7 @@ Route::get('/checklist', [ChecklistController::class, 'index']);
 Route::get('/news/{articleId}/comments', [NewsCommentController::class, 'index']);
 Route::get('/bleeter/channels', [BleeterController::class, 'channels']);
 Route::get('/bleeter/posts', [BleeterController::class, 'posts']);
+Route::get('/bleeter/posts/{id}/comments', [BleeterController::class, 'comments']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AppleSessionController::class, 'me']);
@@ -68,6 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Bleeter (auth required to post/like)
     Route::post('/bleeter/posts', [BleeterController::class, 'store']);
     Route::post('/bleeter/posts/{id}/like', [BleeterController::class, 'like']);
+    Route::post('/bleeter/posts/{id}/comments', [BleeterController::class, 'storeComment']);
 
     // Checklist progress (auth required)
     Route::post('/checklist/{id}/toggle', [ChecklistController::class, 'toggle']);

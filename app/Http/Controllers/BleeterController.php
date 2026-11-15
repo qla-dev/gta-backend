@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BleeterChannel;
+use App\Models\BleeterComment;
 use App\Models\BleeterPost;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class BleeterController extends Controller
     public function posts(Request $request): JsonResponse
     {
         $query = BleeterPost::with(['user:id,name', 'channel:id,name'])
+            ->withCount('comments')
             ->orderByDesc('created_at')
             ->limit(50);
 
@@ -42,6 +44,7 @@ class BleeterController extends Controller
             'channel_id' => $p->channel_id,
             'channel_name' => $p->channel->name ?? 'General',
             'likes_count' => $p->likes_count,
+            'comments_count' => $p->comments_count,
             'created_at' => $p->created_at->toIso8601String(),
         ]);
 
@@ -71,6 +74,7 @@ class BleeterController extends Controller
                 'channel_id' => $post->channel_id,
                 'channel_name' => $post->channel->name,
                 'likes_count' => 0,
+                'comments_count' => 0,
                 'created_at' => $post->created_at->toIso8601String(),
             ],
         ], 201);
@@ -81,6 +85,7 @@ class BleeterController extends Controller
         $post = BleeterPost::findOrFail($id);
         $post->increment('likes_count');
         $post->load(['user:id,name', 'channel:id,name']);
+        $post->loadCount('comments');
 
         return response()->json([
             'post' => [
@@ -90,8 +95,53 @@ class BleeterController extends Controller
                 'channel_id' => $post->channel_id,
                 'channel_name' => $post->channel->name ?? 'General',
                 'likes_count' => $post->likes_count,
+                'comments_count' => $post->comments_count,
                 'created_at' => $post->created_at->toIso8601String(),
             ],
         ]);
+    }
+
+    public function comments(int $id): JsonResponse
+    {
+        $post = BleeterPost::findOrFail($id);
+
+        $comments = $post->comments()
+            ->with('user:id,name')
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'user_name' => $c->user->name ?? 'Anonymous',
+                'body' => $c->body,
+                'created_at' => $c->created_at->toIso8601String(),
+            ]);
+
+        return response()->json(['comments' => $comments]);
+    }
+
+    public function storeComment(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'body' => 'required|string|max:500',
+        ]);
+
+        BleeterPost::findOrFail($id);
+
+        $comment = BleeterComment::create([
+            'user_id' => $request->user()->id,
+            'bleeter_post_id' => $id,
+            'body' => $request->input('body'),
+        ]);
+
+        $comment->load('user:id,name');
+
+        return response()->json([
+            'comment' => [
+                'id' => $comment->id,
+                'user_name' => $comment->user->name,
+                'body' => $comment->body,
+                'created_at' => $comment->created_at->toIso8601String(),
+            ],
+        ], 201);
     }
 }
